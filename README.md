@@ -29,6 +29,12 @@
 
         AllocateTensors() failed
         ```
+- Adicionar uma nova imagem na "base":
+    - Coloque a imagem na pasta `static_images/sample_images/<nome_da_imagem>`
+    - Adicione a imagem no arquivo de build (`static_images/CMakeLists.txt`)
+        - A adicione na seção `EMBED_FILES`
+    - **Atenção!**
+        - Caso a dimensão da imagem seja alterada, você deve alterar o arquivo `main/model_settings.h`, para satisfazer as dimensões da imagem.
 
 # Referências
 - Projeto base: https://github.com/espressif/esp-tflite-micro/tree/master/examples/person_detection
