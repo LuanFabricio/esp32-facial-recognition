@@ -51,7 +51,7 @@ constexpr int scratchBufSize = 40 * 1024;
 constexpr int scratchBufSize = 0;
 #endif
 // An area of memory to use for input, output, and intermediate arrays.
-constexpr int kTensorArenaSize = 81 * 1024 + scratchBufSize;
+constexpr int kTensorArenaSize = 5 * 81 * 1024 + scratchBufSize;
 static uint8_t *tensor_arena;//[kTensorArenaSize]; // Maybe we should move this to external
 }  // namespace
 
@@ -67,7 +67,7 @@ void setup() {
   }
 
   if (tensor_arena == NULL) {
-    tensor_arena = (uint8_t *) heap_caps_malloc(kTensorArenaSize, MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    tensor_arena = (uint8_t *) heap_caps_malloc(kTensorArenaSize, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
   }
   if (tensor_arena == NULL) {
     printf("Couldn't allocate memory of %d bytes\n", kTensorArenaSize);
@@ -82,12 +82,17 @@ void setup() {
   //
   // tflite::AllOpsResolver resolver;
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroMutableOpResolver<5> micro_op_resolver;
+  static tflite::MicroMutableOpResolver<10> micro_op_resolver;
   micro_op_resolver.AddAveragePool2D();
   micro_op_resolver.AddConv2D();
   micro_op_resolver.AddDepthwiseConv2D();
   micro_op_resolver.AddReshape();
   micro_op_resolver.AddSoftmax();
+  micro_op_resolver.AddMul();
+  micro_op_resolver.AddAdd();
+  micro_op_resolver.AddHardSwish();
+  micro_op_resolver.AddPad();
+  micro_op_resolver.AddMean();
 
   // Build an interpreter to run the model with.
   // NOLINTNEXTLINE(runtime-global-variables)
@@ -159,8 +164,15 @@ void loop() {
 
 void run_inference(void *ptr) {
   /* Convert from uint8 picture data to int8 */
-  for (int i = 0; i < kNumCols * kNumRows; i++) {
+  for (int i = 0; i < kNumCols * kNumRows * kNumChannels; i++) {
     input->data.int8[i] = ((uint8_t *) ptr)[i] ^ 0x80;
+  }
+
+  MicroPrintf("Input type: %d", input->type);
+  MicroPrintf("Input bytes: %d", input->bytes);
+  MicroPrintf("Input dims size: %d", input->dims->size);
+  for (int i = 0; i < input->dims->size; i++) {
+    MicroPrintf("[%d]Input dim size: %d", i+1, input->dims->data[i]);
   }
 
 #if defined(COLLECT_CPU_STATS)
@@ -194,6 +206,12 @@ void run_inference(void *ptr) {
 #endif
 
   TfLiteTensor* output = interpreter->output(0);
+  MicroPrintf("Output type: %d", output->type);
+  MicroPrintf("Output bytes: %d", output->bytes);
+  MicroPrintf("Output dims size: %d", output->dims->size);
+  for (int i = 0; i < output->dims->size; i++) {
+    MicroPrintf("[%d]Output dim size: %d", i+1, output->dims->data[i]);
+  }
 
   // Process the inference results.
   int8_t person_score = output->data.uint8[kPersonIndex];
