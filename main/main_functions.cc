@@ -46,12 +46,12 @@ TfLiteTensor* input = nullptr;
 // signed value.
 
 #ifdef CONFIG_IDF_TARGET_ESP32S3
-constexpr int scratchBufSize = 40 * 1024;
+constexpr int scratchBufSize = (5 + 40) * 1024 + 80320;
 #else
 constexpr int scratchBufSize = 0;
 #endif
 // An area of memory to use for input, output, and intermediate arrays.
-constexpr int kTensorArenaSize = 5 * 81 * 1024 + scratchBufSize;
+constexpr int kTensorArenaSize = 3211264 + scratchBufSize; //10 * 81 * 1024 + scratchBufSize;
 static uint8_t *tensor_arena;//[kTensorArenaSize]; // Maybe we should move this to external
 }  // namespace
 
@@ -73,6 +73,7 @@ void setup() {
     printf("Couldn't allocate memory of %d bytes\n", kTensorArenaSize);
     return;
   }
+  MicroPrintf("kTensorArenaSize: %i", kTensorArenaSize);
 
   // Pull in only the operation implementations we need.
   // This relies on a complete list of all the ops needed by this graph.
@@ -82,17 +83,19 @@ void setup() {
   //
   // tflite::AllOpsResolver resolver;
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroMutableOpResolver<10> micro_op_resolver;
-  micro_op_resolver.AddAveragePool2D();
+  static tflite::MicroMutableOpResolver<14> micro_op_resolver;
+  micro_op_resolver.AddPrelu();
+  micro_op_resolver.AddPack();
+  micro_op_resolver.AddMean();
+  micro_op_resolver.AddShape();
   micro_op_resolver.AddConv2D();
+  micro_op_resolver.AddLogistic();
   micro_op_resolver.AddDepthwiseConv2D();
+  micro_op_resolver.AddStridedSlice();
   micro_op_resolver.AddReshape();
-  micro_op_resolver.AddSoftmax();
   micro_op_resolver.AddMul();
   micro_op_resolver.AddAdd();
-  micro_op_resolver.AddHardSwish();
-  micro_op_resolver.AddPad();
-  micro_op_resolver.AddMean();
+  micro_op_resolver.AddFullyConnected();
 
   // Build an interpreter to run the model with.
   // NOLINTNEXTLINE(runtime-global-variables)
