@@ -29,6 +29,9 @@
 
         AllocateTensors() failed
         ```
+- Watchdog trigged
+    - Solução: Desativar o watchdog pelo menu `idf.py menuconfig` > Component config > ESP System Settings.
+
 - Adicionar uma nova imagem na "base":
     - Coloque a imagem na pasta `static_images/sample_images/<nome_da_imagem>`
     - Adicione a imagem no arquivo de build (`static_images/CMakeLists.txt`)
@@ -38,3 +41,4 @@
 
 # Referências
 - Projeto base: https://github.com/espressif/esp-tflite-micro/tree/master/examples/person_detection
+- Documentação - Watchdog: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/kconfig-reference.html#config-esp-task-wdt-check-idle-task-cpu0
