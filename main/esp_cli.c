@@ -23,23 +23,64 @@
 #include "esp_cli.h"
 #include "esp_timer.h"
 
-#define IMAGE_COUNT 11
-static uint8_t *image_database[IMAGE_COUNT];
+#define IMAGE_COUNT 10
+static float image_database[IMAGE_COUNT][256];
 
 
-extern const uint8_t image0_start[]   asm("_binary_image0_start");
-extern const uint8_t image1_start[]   asm("_binary_image1_start");
-extern const uint8_t image2_start[]   asm("_binary_image2_start");
-extern const uint8_t image3_start[]   asm("_binary_image3_start");
-extern const uint8_t image4_start[]   asm("_binary_image4_start");
-extern const uint8_t image5_start[]   asm("_binary_image5_start");
-extern const uint8_t image6_start[]   asm("_binary_image6_start");
-extern const uint8_t image7_start[]   asm("_binary_image7_start");
-extern const uint8_t image8_start[]   asm("_binary_image8_start");
-extern const uint8_t image9_start[]   asm("_binary_image9_start");
-extern const uint8_t tux_start[]      asm("_binary_tux_start");
+extern const uint8_t image_start0[]   asm("_binary_image0_start");
+extern const uint8_t image_start1[]   asm("_binary_image1_start");
+extern const uint8_t image_start2[]   asm("_binary_image2_start");
+extern const uint8_t image_start3[]   asm("_binary_image3_start");
+extern const uint8_t image_start4[]   asm("_binary_image4_start");
+extern const uint8_t image_start5[]   asm("_binary_image5_start");
+extern const uint8_t image_start6[]   asm("_binary_image6_start");
+extern const uint8_t image_start7[]   asm("_binary_image7_start");
+extern const uint8_t image_start8[]   asm("_binary_image8_start");
+extern const uint8_t image_start9[]   asm("_binary_image9_start");
 
+// static float image_features[10][255]= {0};
 static const char *TAG = "[esp_cli]";
+
+static int task_benchmark(int argc, char *argv[])
+{
+  printf("\n");
+  int runs = 10;
+
+  if (argc == 2) {
+    runs = atoi(argv[1]);
+  }
+
+  if (runs > 1024) {
+    ESP_LOGW(TAG, "The run(%i) > MAX (1024)", runs);
+  }
+
+  float inference_time[1024] = {0};
+  double inference_time_avg = 0.0f;
+  unsigned detect_time, inference_time_index;
+  for (int i = 0; i < runs; i++) {
+    double run_inference_time_avg = 0.0f;
+    for (int j = 0; j < IMAGE_COUNT; j++) {
+      inference_time_index = IMAGE_COUNT*i+j;
+      detect_time = esp_timer_get_time();
+      run_inference((void *)image_database[j]);
+      inference_time[inference_time_index] = (esp_timer_get_time() - detect_time)/1000.0;
+      ESP_LOGI(
+          TAG,
+          "Run %i, image %i delta time: %0.4lf\n",
+          i, j, inference_time[inference_time_index]);
+      run_inference_time_avg += inference_time[inference_time_index];
+    }
+    inference_time_avg += run_inference_time_avg;
+
+    run_inference_time_avg /= IMAGE_COUNT;
+    ESP_LOGI(TAG, "Run %i Avg inference time: %0.4lf\n", i, run_inference_time_avg);
+  }
+
+  inference_time_avg /= runs * IMAGE_COUNT;
+  ESP_LOGI(TAG, "Avg. inference time: %0.4lf\n", inference_time_avg);
+
+  return 0;
+}
 
 static int task_dump_cli_handler(int argc, char *argv[])
 {
@@ -117,6 +158,7 @@ static int inference_cli_handler(int argc, char *argv[])
     return -1;
   }
 
+  ESP_LOGI(TAG,"Running inference...");
   // char file_name[30];
   // sprintf(file_name, "image%d.raw", image_number);
   unsigned detect_time;
@@ -152,6 +194,12 @@ static esp_console_cmd_t diag_cmds[] = {
       "Note: image numbers ranging from 0 - 9 only are valid",
     .func = inference_cli_handler,
   },
+  {
+    .command = "benchmark",
+    .help = "benchmark [<amount_of_runs>]"
+      "Note: The max amount of runs is 1024",
+    .func = task_benchmark,
+  }
 };
 
 int esp_cli_register_cmds()
@@ -165,19 +213,33 @@ int esp_cli_register_cmds()
   return 0;
 }
 
+#define IMAGE_DATABASE_INIT_X(x) \
+    uint8_t* image##x = (uint8_t *) image_start##x;        \
+    for (uint16_t j = 0; j < 256; j++) {              \
+      image_database[x][j] = (image##x[j] - 127.5) / 128;\
+    }                                                 \
+
 static void image_database_init()
 {
-  image_database[0] = (uint8_t *) image0_start;
-  image_database[1] = (uint8_t *) image1_start;
-  image_database[2] = (uint8_t *) image2_start;
-  image_database[3] = (uint8_t *) image3_start;
-  image_database[4] = (uint8_t *) image4_start;
-  image_database[5] = (uint8_t *) image5_start;
-  image_database[6] = (uint8_t *) image6_start;
-  image_database[7] = (uint8_t *) image7_start;
-  image_database[8] = (uint8_t *) image8_start;
-  image_database[9] = (uint8_t *) image9_start;
-  image_database[10] = (uint8_t *) tux_start;
+  IMAGE_DATABASE_INIT_X(0);
+  IMAGE_DATABASE_INIT_X(1);
+  IMAGE_DATABASE_INIT_X(2);
+  IMAGE_DATABASE_INIT_X(3);
+  IMAGE_DATABASE_INIT_X(4);
+  IMAGE_DATABASE_INIT_X(5);
+  IMAGE_DATABASE_INIT_X(6);
+  IMAGE_DATABASE_INIT_X(7);
+  IMAGE_DATABASE_INIT_X(8);
+  IMAGE_DATABASE_INIT_X(9);
+  // image_database[1] = (uint8_t *) image1_start;
+  // image_database[2] = (uint8_t *) image2_start;
+  // image_database[3] = (uint8_t *) image3_start;
+  // image_database[4] = (uint8_t *) image4_start;
+  // image_database[5] = (uint8_t *) image5_start;
+  // image_database[6] = (uint8_t *) image6_start;
+  // image_database[7] = (uint8_t *) image7_start;
+  // image_database[8] = (uint8_t *) image8_start;
+  // image_database[9] = (uint8_t *) image9_start;
 }
 
 int esp_cli_start()
