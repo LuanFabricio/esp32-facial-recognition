@@ -27,6 +27,7 @@ limitations under the License.
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include <stdint.h>
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
 #include <esp_log.h>
@@ -96,6 +97,8 @@ void setup() {
   micro_op_resolver.AddMul();
   micro_op_resolver.AddAdd();
   micro_op_resolver.AddFullyConnected();
+  micro_op_resolver.AddQuantize();
+  micro_op_resolver.AddDequantize();
 
   // Build an interpreter to run the model with.
   // NOLINTNEXTLINE(runtime-global-variables)
@@ -165,17 +168,10 @@ void loop() {
   extern long long mul_total_time;
 #endif
 
-void run_inference(void *ptr) {
-  /* Convert from uint8 picture data to int8 */
+TfLiteTensor* run_inference(void *ptr) {
+  printf("Input type: %u\n", input->type);
   for (int i = 0; i < kNumCols * kNumRows * kNumChannels; i++) {
-    input->data.int8[i] = ((uint8_t *) ptr)[i] ^ 0x80;
-  }
-
-  MicroPrintf("Input type: %d", input->type);
-  MicroPrintf("Input bytes: %d", input->bytes);
-  MicroPrintf("Input dims size: %d", input->dims->size);
-  for (int i = 0; i < input->dims->size; i++) {
-    MicroPrintf("[%d]Input dim size: %d", i+1, input->dims->data[i]);
+    input->data.uint8[i] = ((uint8_t *) ptr)[i];
   }
 
 #if defined(COLLECT_CPU_STATS)
@@ -208,21 +204,8 @@ void run_inference(void *ptr) {
   mul_total_time = 0;
 #endif
 
-  TfLiteTensor* output = interpreter->output(0);
-  MicroPrintf("Output type: %d", output->type);
-  MicroPrintf("Output bytes: %d", output->bytes);
-  MicroPrintf("Output dims size: %d", output->dims->size);
-  for (int i = 0; i < output->dims->size; i++) {
-    MicroPrintf("[%d]Output dim size: %d", i+1, output->dims->data[i]);
-  }
+  TfLiteTensor *output = interpreter->output(0);
 
-  // Process the inference results.
-  int8_t person_score = output->data.uint8[kPersonIndex];
-  int8_t no_person_score = output->data.uint8[kNotAPersonIndex];
-
-  float person_score_f =
-      (person_score - output->params.zero_point) * output->params.scale;
-  float no_person_score_f =
-      (no_person_score - output->params.zero_point) * output->params.scale;
-  RespondToDetection(person_score_f, no_person_score_f);
+  printf("Output type: %u\n", output->type);
+  return output;
 }
