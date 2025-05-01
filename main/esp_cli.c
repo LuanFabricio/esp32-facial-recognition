@@ -12,6 +12,8 @@
 // limitations under the License.
 
 #include <stdio.h>
+#include <stdint.h>
+#include <math.h>
 #include <string.h>
 #include <esp_log.h>
 #include <esp_console.h>
@@ -19,65 +21,147 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
+#include "tensorflow/lite/core/c/common.h"
 #include "esp_main.h"
 #include "esp_cli.h"
 #include "esp_timer.h"
 
-#define IMAGE_COUNT 10
-static float image_database[IMAGE_COUNT][256];
+#define MAX_RUNS 10
+#define IMAGE_COUNT 2
+#define IMAGE_FLAT_SIZE (112 * 112 * 3)
+static uint8_t image_database[IMAGE_COUNT][IMAGE_FLAT_SIZE];
 
+#define MODEL_FEATURE_MAP_SIZE 256
+static uint8_t feature_map_cache[IMAGE_COUNT][MODEL_FEATURE_MAP_SIZE];
 
 extern const uint8_t image_start0[]   asm("_binary_image0_start");
 extern const uint8_t image_start1[]   asm("_binary_image1_start");
-extern const uint8_t image_start2[]   asm("_binary_image2_start");
-extern const uint8_t image_start3[]   asm("_binary_image3_start");
-extern const uint8_t image_start4[]   asm("_binary_image4_start");
-extern const uint8_t image_start5[]   asm("_binary_image5_start");
-extern const uint8_t image_start6[]   asm("_binary_image6_start");
-extern const uint8_t image_start7[]   asm("_binary_image7_start");
-extern const uint8_t image_start8[]   asm("_binary_image8_start");
-extern const uint8_t image_start9[]   asm("_binary_image9_start");
+// extern const uint8_t image_start2[]   asm("_binary_image2_start");
+// extern const uint8_t image_start3[]   asm("_binary_image3_start");
+// extern const uint8_t image_start4[]   asm("_binary_image4_start");
 
 // static float image_features[10][255]= {0};
 static const char *TAG = "[esp_cli]";
+inline float dequantized(const float value, const TfLiteTensor* tlt) {
+  return (value - tlt->params.zero_point) * tlt->params.scale;
+}
+
+float calc_cos_dist(
+    uint8_t feature_map1[MODEL_FEATURE_MAP_SIZE],
+    uint8_t feature_map2[MODEL_FEATURE_MAP_SIZE],
+    const TfLiteTensor* tlt)
+{
+  float normal1 = 0;
+  float normal2 = 0;
+  for (uint16_t i = 0; i < MODEL_FEATURE_MAP_SIZE; i++) {
+    normal1 += dequantized(feature_map1[i], tlt) * dequantized(feature_map1[i], tlt);
+    normal2 += dequantized(feature_map2[i], tlt) * dequantized(feature_map2[i], tlt);
+  }
+
+  normal1 = sqrt(normal1);
+  normal2 = sqrt(normal2);
+
+  float dot_prod = 0.0f;
+  for (uint16_t i = 0; i < MODEL_FEATURE_MAP_SIZE; i++) {
+    dot_prod += dequantized(feature_map1[i], tlt) * dequantized(feature_map2[i], tlt);
+  }
+  const float cos_sim = dot_prod / (normal1 * normal2);
+
+  return 1.0f - cos_sim;
+}
+
+uint32_t predict_image(
+    uint8_t feature_map[MODEL_FEATURE_MAP_SIZE],
+    const TfLiteTensor* tlt)
+{
+  uint32_t predicted_image_index = -1;
+  float smallest_cos_dist = 10000.0;
+
+  for (uint8_t i = 0; i < IMAGE_COUNT; i++) {
+    const float cos_dist = calc_cos_dist(feature_map, feature_map_cache[i], tlt);
+    if (cos_dist < smallest_cos_dist) {
+      predicted_image_index = i;
+      smallest_cos_dist = cos_dist;
+    }
+  }
+
+  return predicted_image_index;
+}
+
+float calc_standart_deviation(float inference_time[MAX_RUNS], uint8_t runs, float avg)
+{
+    float standart_deviation = 0;
+    for (uint8_t i = 0; i < runs; i++) {
+      standart_deviation += pow(inference_time[i] - avg, 2.0f);
+    }
+
+    standart_deviation /= (runs - 1);
+    standart_deviation = sqrt(standart_deviation);
+
+    return standart_deviation;
+}
 
 static int task_benchmark(int argc, char *argv[])
 {
   printf("\n");
-  int runs = 10;
+  uint8_t runs = MAX_RUNS;
 
   if (argc == 2) {
-    runs = atoi(argv[1]);
+    runs = (uint8_t)atoi(argv[1]);
   }
 
-  if (runs > 1024) {
-    ESP_LOGW(TAG, "The run(%i) > MAX (1024)", runs);
+  if (runs > MAX_RUNS) {
+    ESP_LOGW(TAG, "The run(%i) > MAX (%i)", runs, MAX_RUNS);
   }
 
-  float inference_time[1024] = {0};
-  double inference_time_avg = 0.0f;
-  unsigned detect_time, inference_time_index;
-  for (int i = 0; i < runs; i++) {
-    double run_inference_time_avg = 0.0f;
-    for (int j = 0; j < IMAGE_COUNT; j++) {
-      inference_time_index = IMAGE_COUNT*i+j;
-      detect_time = esp_timer_get_time();
-      run_inference((void *)image_database[j]);
+  uint8_t hits = 0;
+  uint8_t total = 0;
+
+  float inference_time[MAX_RUNS] = {0};
+  float inference_time_avg = 0.0f;
+  uint8_t i, j;
+  for (i = 0; i < runs; i++) {
+    float run_inference_time_avg = 0.0f;
+
+    for (j = 0; j < IMAGE_COUNT; j++) {
+      const uint16_t inference_time_index = IMAGE_COUNT*i+j;
+      const int64_t detect_time = esp_timer_get_time();
+      TfLiteTensor* tf = run_inference((void *)image_database[j]);
       inference_time[inference_time_index] = (esp_timer_get_time() - detect_time)/1000.0;
+
+      const uint8_t predicted_image = predict_image(tf->data.uint8, tf);
+
+      ESP_LOGI(TAG, "[%u, %u] (%i, %i/%i/%i)", i, j, i < runs, i == 4, i == 5, i == 9);
+      ESP_LOGI(TAG, "[%u, %u] Predicted index %i", i, j, predicted_image);
+      if (predicted_image == j) {
+        hits++;
+        ESP_LOGW(TAG, "[%u, %u] Hit!", i, j);
+      } else {
+        ESP_LOGE(TAG, "[%u, %u] Miss!", i, j);
+      }
+      total++;
+
       ESP_LOGI(
           TAG,
-          "Run %i, image %i delta time: %0.4lf\n",
+          "Run %u, image %u delta time: %0.4lf\n",
           i, j, inference_time[inference_time_index]);
       run_inference_time_avg += inference_time[inference_time_index];
+      printf("Final: %i, %i\n", i, j);
     }
-    inference_time_avg += run_inference_time_avg;
-
     run_inference_time_avg /= IMAGE_COUNT;
-    ESP_LOGI(TAG, "Run %i Avg inference time: %0.4lf\n", i, run_inference_time_avg);
+    inference_time_avg += run_inference_time_avg / runs;
+    ESP_LOGI(TAG, "Run %u Avg inference time: %0.4lf\n", i, run_inference_time_avg);
   }
 
-  inference_time_avg /= runs * IMAGE_COUNT;
-  ESP_LOGI(TAG, "Avg. inference time: %0.4lf\n", inference_time_avg);
+  ESP_LOGI(TAG, "Avg. inference time: %0.4f", inference_time_avg);
+  const float standart_deviation = calc_standart_deviation(
+      inference_time, runs, inference_time_avg);
+  ESP_LOGI(TAG, "Std. deviation: (+/-)%0.12f", standart_deviation);
+  ESP_LOGI(TAG, "Accuracy: %0.4f (%u/(%u*%u)|%u)",
+      (float)hits/(runs*IMAGE_COUNT),
+      hits, runs, IMAGE_COUNT,
+      total);
+  printf("Final: %i, %i\n", i, j);
 
   return 0;
 }
@@ -213,24 +297,37 @@ int esp_cli_register_cmds()
   return 0;
 }
 
-#define IMAGE_DATABASE_INIT_X(x) \
-    uint8_t* image##x = (uint8_t *) image_start##x;        \
-    for (uint16_t j = 0; j < 256; j++) {              \
-      image_database[x][j] = (image##x[j] - 127.5) / 128;\
-    }                                                 \
 
 static void image_database_init()
 {
+  // extern const uint8_t image_start4[]   asm("_binary_image4_start");
+  // extern const uint8_t image_start5[]   asm("_binary_image5_start");
+  // extern const uint8_t image_start6[]   asm("_binary_image6_start");
+  // extern const uint8_t image_start7[]   asm("_binary_image7_start");
+  // extern const uint8_t image_start8[]   asm("_binary_image8_start");
+  // extern const uint8_t image_start9[]   asm("_binary_image9_start");
+
+#define IMAGE_DATABASE_INIT_X(x) \
+  uint8_t* image##x = (uint8_t *) image_start##x;\
+  for (uint16_t j = 0; j < IMAGE_FLAT_SIZE; j++) {\
+    image_database[x][j] = image##x[j];\
+  }\
+
   IMAGE_DATABASE_INIT_X(0);
   IMAGE_DATABASE_INIT_X(1);
-  IMAGE_DATABASE_INIT_X(2);
-  IMAGE_DATABASE_INIT_X(3);
-  IMAGE_DATABASE_INIT_X(4);
-  IMAGE_DATABASE_INIT_X(5);
-  IMAGE_DATABASE_INIT_X(6);
-  IMAGE_DATABASE_INIT_X(7);
-  IMAGE_DATABASE_INIT_X(8);
-  IMAGE_DATABASE_INIT_X(9);
+  // IMAGE_DATABASE_INIT_X(2);
+  // IMAGE_DATABASE_INIT_X(2);
+  // IMAGE_DATABASE_INIT_X(3);
+  // IMAGE_DATABASE_INIT_X(4);
+
+  for (uint16_t i = 0; i < IMAGE_COUNT; i++) {
+    TfLiteTensor* tft = run_inference((void*) image_database[i]);
+    for (uint16_t j = 0; j < MODEL_FEATURE_MAP_SIZE; j++) {
+      feature_map_cache[i][j] = tft->data.uint8[j];
+    }
+  }
+
+#undef  IMAGE_DATABASE_INIT_X
   // image_database[1] = (uint8_t *) image1_start;
   // image_database[2] = (uint8_t *) image2_start;
   // image_database[3] = (uint8_t *) image3_start;
@@ -245,6 +342,11 @@ static void image_database_init()
 int esp_cli_start()
 {
   image_database_init();
+  char* argv[] = {
+    "", "5"
+  };
+  task_benchmark(2, argv);
+
   static int cli_started;
   if (cli_started) {
     return 0;
