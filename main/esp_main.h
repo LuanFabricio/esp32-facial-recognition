@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "sdkconfig.h"
+#include "tensorflow/lite/c/common.h"
 
 // Enable this to do inference on embedded images
 // #define CLI_ONLY_INFERENCE 1
@@ -33,7 +34,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
-extern void run_inference(void *ptr);
+extern TfLiteTensor* run_inference(void *ptr);
 #ifdef __cplusplus
 }
 #endif
