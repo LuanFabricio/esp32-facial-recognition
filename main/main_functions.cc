@@ -52,8 +52,8 @@ constexpr int scratchBufSize = (5 + 40) * 1024 + 80320;
 constexpr int scratchBufSize = 0;
 #endif
 // An area of memory to use for input, output, and intermediate arrays.
-constexpr int kTensorArenaSize = 3211264 + scratchBufSize; //10 * 81 * 1024 + scratchBufSize;
 static uint8_t *tensor_arena;//[kTensorArenaSize]; // Maybe we should move this to external
+constexpr int kTensorArenaSize = 933520 + scratchBufSize;// 10 * 81 * 1024 + scratchBufSize;//3211264 + scratchBufSize;
 }  // namespace
 
 // The name of this function is important for Arduino compatibility.
@@ -74,7 +74,7 @@ void setup() {
     printf("Couldn't allocate memory of %d bytes\n", kTensorArenaSize);
     return;
   }
-  MicroPrintf("kTensorArenaSize: %i", kTensorArenaSize);
+  MicroPrintf("kTensorArenaSize: %i (%i)", kTensorArenaSize, scratchBufSize);
 
   // Pull in only the operation implementations we need.
   // This relies on a complete list of all the ops needed by this graph.
