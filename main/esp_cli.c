@@ -27,17 +27,17 @@
 #include "esp_timer.h"
 
 #define MAX_RUNS 10
-#define IMAGE_COUNT 2
+#define IMAGE_COUNT 3
 #define IMAGE_FLAT_SIZE (112 * 112 * 3)
-static uint8_t image_database[IMAGE_COUNT][IMAGE_FLAT_SIZE];
+static uint8_t *image_database[IMAGE_COUNT]; //[IMAGE_FLAT_SIZE];
 
 #define MODEL_FEATURE_MAP_SIZE 256
 static uint8_t feature_map_cache[IMAGE_COUNT][MODEL_FEATURE_MAP_SIZE];
 
 extern const uint8_t image_start0[]   asm("_binary_image0_start");
 extern const uint8_t image_start1[]   asm("_binary_image1_start");
-// extern const uint8_t image_start2[]   asm("_binary_image2_start");
-// extern const uint8_t image_start3[]   asm("_binary_image3_start");
+extern const uint8_t image_start2[]   asm("_binary_image2_start");
+// extern const uint8_t image_start3[]   asm("_binary_image2_start");
 // extern const uint8_t image_start4[]   asm("_binary_image4_start");
 
 // static float image_features[10][255]= {0};
@@ -70,11 +70,11 @@ float calc_cos_dist(
   return 1.0f - cos_sim;
 }
 
-uint32_t predict_image(
+uint8_t predict_image(
     uint8_t feature_map[MODEL_FEATURE_MAP_SIZE],
     const TfLiteTensor* tlt)
 {
-  uint32_t predicted_image_index = -1;
+  uint8_t predicted_image_index = -1;
   float smallest_cos_dist = 10000.0;
 
   for (uint8_t i = 0; i < IMAGE_COUNT; i++) {
@@ -124,7 +124,8 @@ static int task_benchmark(int argc, char *argv[])
     float run_inference_time_avg = 0.0f;
 
     for (j = 0; j < IMAGE_COUNT; j++) {
-      const uint16_t inference_time_index = IMAGE_COUNT*i+j;
+      printf("========== RUN %i ==========\n", i);
+      const uint8_t inference_time_index = IMAGE_COUNT*i+j;
       const int64_t detect_time = esp_timer_get_time();
       TfLiteTensor* tf = run_inference((void *)image_database[j]);
       inference_time[inference_time_index] = (esp_timer_get_time() - detect_time)/1000.0;
@@ -300,21 +301,17 @@ int esp_cli_register_cmds()
 
 static void image_database_init()
 {
-  // extern const uint8_t image_start4[]   asm("_binary_image4_start");
-  // extern const uint8_t image_start5[]   asm("_binary_image5_start");
-  // extern const uint8_t image_start6[]   asm("_binary_image6_start");
-  // extern const uint8_t image_start7[]   asm("_binary_image7_start");
-  // extern const uint8_t image_start8[]   asm("_binary_image8_start");
-  // extern const uint8_t image_start9[]   asm("_binary_image9_start");
-
 #define IMAGE_DATABASE_INIT_X(x) \
   uint8_t* image##x = (uint8_t *) image_start##x;\
   for (uint16_t j = 0; j < IMAGE_FLAT_SIZE; j++) {\
     image_database[x][j] = image##x[j];\
   }\
 
-  IMAGE_DATABASE_INIT_X(0);
-  IMAGE_DATABASE_INIT_X(1);
+  image_database[0] = (uint8_t*) image_start0;
+  image_database[1] = (uint8_t*) image_start1;
+  image_database[2] = (uint8_t*) image_start2;
+  // IMAGE_DATABASE_INIT_X(0);
+  // IMAGE_DATABASE_INIT_X(1);
   // IMAGE_DATABASE_INIT_X(2);
   // IMAGE_DATABASE_INIT_X(2);
   // IMAGE_DATABASE_INIT_X(3);
@@ -328,24 +325,15 @@ static void image_database_init()
   }
 
 #undef  IMAGE_DATABASE_INIT_X
-  // image_database[1] = (uint8_t *) image1_start;
-  // image_database[2] = (uint8_t *) image2_start;
-  // image_database[3] = (uint8_t *) image3_start;
-  // image_database[4] = (uint8_t *) image4_start;
-  // image_database[5] = (uint8_t *) image5_start;
-  // image_database[6] = (uint8_t *) image6_start;
-  // image_database[7] = (uint8_t *) image7_start;
-  // image_database[8] = (uint8_t *) image8_start;
-  // image_database[9] = (uint8_t *) image9_start;
 }
 
 int esp_cli_start()
 {
   image_database_init();
-  char* argv[] = {
-    "", "5"
-  };
-  task_benchmark(2, argv);
+  // char* argv[] = {
+  //   "", "10"
+  // };
+  // task_benchmark(2, argv);
 
   static int cli_started;
   if (cli_started) {
