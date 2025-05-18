@@ -37,7 +37,7 @@ static uint8_t feature_map_cache[IMAGE_COUNT][MODEL_FEATURE_MAP_SIZE];
 extern const uint8_t image_start0[]   asm("_binary_image0_start");
 extern const uint8_t image_start1[]   asm("_binary_image1_start");
 extern const uint8_t image_start2[]   asm("_binary_image2_start");
-// extern const uint8_t image_start3[]   asm("_binary_image2_start");
+// extern const uint8_t image_start3[]   asm("_binary_image3_start");
 // extern const uint8_t image_start4[]   asm("_binary_image4_start");
 
 // static float image_features[10][255]= {0};
@@ -47,10 +47,20 @@ inline float dequantized(const float value, const TfLiteTensor* tlt) {
 }
 
 float calc_cos_dist(
-    uint8_t feature_map1[MODEL_FEATURE_MAP_SIZE],
-    uint8_t feature_map2[MODEL_FEATURE_MAP_SIZE],
+    const uint8_t feature_map1[MODEL_FEATURE_MAP_SIZE],
+    const uint8_t feature_map2[MODEL_FEATURE_MAP_SIZE],
     const TfLiteTensor* tlt)
 {
+  printf("========================= Cos dist =========================");
+  printf("\nFeature map1:\n\t");
+  for (uint16_t i = 0; i < 10; i++) {
+    printf("0x%02x ", feature_map1[i]);
+  }
+  printf("\nFeature map2:\n\t");
+  for (uint16_t i = 0; i < 10; i++) {
+    printf("0x%02x ", feature_map2[i]);
+  }
+  printf("\n");
   float normal1 = 0;
   float normal2 = 0;
   for (uint16_t i = 0; i < MODEL_FEATURE_MAP_SIZE; i++) {
@@ -71,7 +81,7 @@ float calc_cos_dist(
 }
 
 uint8_t predict_image(
-    uint8_t feature_map[MODEL_FEATURE_MAP_SIZE],
+    const uint8_t feature_map[MODEL_FEATURE_MAP_SIZE],
     const TfLiteTensor* tlt)
 {
   uint8_t predicted_image_index = -1;
@@ -119,6 +129,7 @@ static int task_benchmark(int argc, char *argv[])
 
   float inference_time[MAX_RUNS] = {0};
   float inference_time_avg = 0.0f;
+  // const uint8_t feature_map[MODEL_FEATURE_MAP_SIZE] = {0};
   uint8_t i, j;
   for (i = 0; i < runs; i++) {
     float run_inference_time_avg = 0.0f;
@@ -310,6 +321,7 @@ static void image_database_init()
   image_database[0] = (uint8_t*) image_start0;
   image_database[1] = (uint8_t*) image_start1;
   image_database[2] = (uint8_t*) image_start2;
+  // image_database[3] = (uint8_t*) image_start3;
   // IMAGE_DATABASE_INIT_X(0);
   // IMAGE_DATABASE_INIT_X(1);
   // IMAGE_DATABASE_INIT_X(2);
