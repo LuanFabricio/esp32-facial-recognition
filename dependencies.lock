@@ -33,7 +33,7 @@ dependencies:
   idf:
     source:
       type: idf
-    version: 5.4.0
+    version: 5.4.1
 direct_dependencies:
 - espressif/esp-tflite-micro
 - espressif/esp32-camera

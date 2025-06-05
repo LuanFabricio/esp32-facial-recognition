@@ -2,15 +2,15 @@
 
 - Runs = 5:
 ```sh
-I (544641) [esp_cli]: Avg. inference time: 3875.9531
-I (544641) [esp_cli]: Std. deviation: (+/-)0.491469740868
-I (544651) [esp_cli]: Accuracy: 1.0000 (10/(5*2)|10)
+I (619291) [esp_cli]: Avg. inference time: 31454.5312
+I (619301) [esp_cli]: Std. deviation: (+/-)4.678455352783
+I (619301) [esp_cli]: Accuracy: 0.6667 (10/(5*3)|15)
 ```
 - Runs = 10:
 ```sh
-I (204051) [esp_cli]: Avg. inference time: 4650.7046
-I (204051) [esp_cli]: Std. deviation: (+/-)816.658508300781
-I (204061) [esp_cli]: Accuracy: 0.9500 (19/(10*2)|20)
+I (1600641) [esp_cli]: Avg. inference time: 30406.1328
+I (1600651) [esp_cli]: Std. deviation: (+/-)1105.476196289062
+I (1600661) [esp_cli]: Accuracy: 0.6000 (18/(10*3)|30)
 ```
 
 ### MobileFaceNet (Quant):

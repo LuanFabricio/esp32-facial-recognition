@@ -29,10 +29,11 @@
 #define MAX_RUNS 10
 #define IMAGE_COUNT 3
 #define IMAGE_FLAT_SIZE (112 * 112 * 3)
-static uint8_t *image_database[IMAGE_COUNT]; //[IMAGE_FLAT_SIZE];
+#define MODEL_TYPE uint8_t
+static MODEL_TYPE *image_database[IMAGE_COUNT]; //[IMAGE_FLAT_SIZE];
 
 #define MODEL_FEATURE_MAP_SIZE 256
-static uint8_t feature_map_cache[IMAGE_COUNT][MODEL_FEATURE_MAP_SIZE];
+static MODEL_TYPE feature_map_cache[IMAGE_COUNT][MODEL_FEATURE_MAP_SIZE];
 
 extern const uint8_t image_start0[]   asm("_binary_image0_start");
 extern const uint8_t image_start1[]   asm("_binary_image1_start");
@@ -42,23 +43,26 @@ extern const uint8_t image_start2[]   asm("_binary_image2_start");
 
 // static float image_features[10][255]= {0};
 static const char *TAG = "[esp_cli]";
-inline float dequantized(const float value, const TfLiteTensor* tlt) {
-  return (value - tlt->params.zero_point) * tlt->params.scale;
+inline float dequantized(const MODEL_TYPE value, const TfLiteTensor* tlt) {
+  return value;
+  // return (value - tlt->params.zero_point) * (tlt->params.scale != 0.0 ? tlt->params.scale : 1);
 }
 
 float calc_cos_dist(
-    const uint8_t feature_map1[MODEL_FEATURE_MAP_SIZE],
-    const uint8_t feature_map2[MODEL_FEATURE_MAP_SIZE],
+    const MODEL_TYPE feature_map1[MODEL_FEATURE_MAP_SIZE],
+    const MODEL_TYPE feature_map2[MODEL_FEATURE_MAP_SIZE],
     const TfLiteTensor* tlt)
 {
   printf("========================= Cos dist =========================");
   printf("\nFeature map1:\n\t");
   for (uint16_t i = 0; i < 10; i++) {
     printf("0x%02x ", feature_map1[i]);
+    // printf("%f ", feature_map1[i]);
   }
   printf("\nFeature map2:\n\t");
   for (uint16_t i = 0; i < 10; i++) {
     printf("0x%02x ", feature_map2[i]);
+    // printf("%f ", feature_map2[i]);
   }
   printf("\n");
   float normal1 = 0;
@@ -81,7 +85,7 @@ float calc_cos_dist(
 }
 
 uint8_t predict_image(
-    const uint8_t feature_map[MODEL_FEATURE_MAP_SIZE],
+    const MODEL_TYPE feature_map[MODEL_FEATURE_MAP_SIZE],
     const TfLiteTensor* tlt)
 {
   uint8_t predicted_image_index = -1;
@@ -89,6 +93,8 @@ uint8_t predict_image(
 
   for (uint8_t i = 0; i < IMAGE_COUNT; i++) {
     const float cos_dist = calc_cos_dist(feature_map, feature_map_cache[i], tlt);
+    printf("Current cos dist: %f\n", smallest_cos_dist);
+    printf("New cos dist: %f\n", cos_dist);
     if (cos_dist < smallest_cos_dist) {
       predicted_image_index = i;
       smallest_cos_dist = cos_dist;
@@ -141,6 +147,7 @@ static int task_benchmark(int argc, char *argv[])
       TfLiteTensor* tf = run_inference((void *)image_database[j]);
       inference_time[inference_time_index] = (esp_timer_get_time() - detect_time)/1000.0;
 
+      // const uint8_t predicted_image = predict_image(tf->data.uint8, tf);
       const uint8_t predicted_image = predict_image(tf->data.uint8, tf);
 
       ESP_LOGI(TAG, "[%u, %u] (%i, %i/%i/%i)", i, j, i < runs, i == 4, i == 5, i == 9);
@@ -174,7 +181,6 @@ static int task_benchmark(int argc, char *argv[])
       hits, runs, IMAGE_COUNT,
       total);
   printf("Final: %i, %i\n", i, j);
-
   return 0;
 }
 
@@ -315,7 +321,7 @@ static void image_database_init()
 #define IMAGE_DATABASE_INIT_X(x) \
   uint8_t* image##x = (uint8_t *) image_start##x;\
   for (uint16_t j = 0; j < IMAGE_FLAT_SIZE; j++) {\
-    image_database[x][j] = image##x[j];\
+    image_database[x][j] = (MODEL_TYPE)image##x[j];\
   }\
 
   image_database[0] = (uint8_t*) image_start0;

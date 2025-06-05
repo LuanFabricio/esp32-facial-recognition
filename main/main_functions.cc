@@ -27,6 +27,7 @@ limitations under the License.
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include <cstdint>
 #include <stdint.h>
 #include <esp_heap_caps.h>
 #include <esp_timer.h>
@@ -53,7 +54,7 @@ constexpr int scratchBufSize = 0;
 #endif
 // An area of memory to use for input, output, and intermediate arrays.
 static uint8_t *tensor_arena;//[kTensorArenaSize]; // Maybe we should move this to external
-constexpr int kTensorArenaSize = 933520 + scratchBufSize;// 10 * 81 * 1024 + scratchBufSize;//3211264 + scratchBufSize;
+constexpr int kTensorArenaSize = 3211264 + scratchBufSize; // 933520 + scratchBufSize;// 10 * 81 * 1024 + scratchBufSize;
 }  // namespace
 
 // The name of this function is important for Arduino compatibility.
@@ -84,7 +85,7 @@ void setup() {
   //
   // tflite::AllOpsResolver resolver;
   // NOLINTNEXTLINE(runtime-global-variables)
-  static tflite::MicroMutableOpResolver<14> micro_op_resolver;
+  static tflite::MicroMutableOpResolver<15> micro_op_resolver;
   micro_op_resolver.AddPrelu();
   micro_op_resolver.AddPack();
   micro_op_resolver.AddMean();
@@ -99,6 +100,7 @@ void setup() {
   micro_op_resolver.AddFullyConnected();
   micro_op_resolver.AddQuantize();
   micro_op_resolver.AddDequantize();
+  micro_op_resolver.AddMaxPool2D();
 
   // Build an interpreter to run the model with.
   // NOLINTNEXTLINE(runtime-global-variables)
@@ -173,6 +175,11 @@ TfLiteTensor* run_inference(void *ptr) {
   for (int i = 0; i < kNumCols * kNumRows * kNumChannels; i++) {
     input->data.uint8[i] = ((uint8_t *) ptr)[i];
   }
+
+  for (int i = 0; i < 10; i++) {
+    printf("0x%x ", input->data.uint8[i]);
+  }
+  printf("\n");
 
 #if defined(COLLECT_CPU_STATS)
   long long start_time = esp_timer_get_time();
